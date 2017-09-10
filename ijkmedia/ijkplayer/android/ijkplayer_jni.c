@@ -975,6 +975,16 @@ static void message_loop_n(JNIEnv *env, IjkMediaPlayer *mp)
                 post_event2(env, weak_thiz, MEDIA_TIMED_TEXT, 0, 0, NULL);
             }
             break;
+        case FFP_MSG_GET_IMG_STATE:
+            if (msg.obj) {
+                jstring file_name = (*env)->NewStringUTF(env, (char *)msg.obj);
+                post_event2(env, weak_thiz, MEDIA_GET_IMG_STATE, msg.arg1, msg.arg2, file_name);
+                J4A_DeleteLocalRef__p(env, &file_name);
+            }
+            else {
+                post_event2(env, weak_thiz, MEDIA_GET_IMG_STATE, msg.arg1, msg.arg2, NULL);
+            }
+            break;
         default:
             ALOGE("unknown FFP_MSG_xxx(%d)\n", msg.what);
             break;
@@ -1064,6 +1074,37 @@ IjkMediaPlayer_native_setLogLevel(JNIEnv *env, jclass clazz, jint level)
     ALOGD("moncleanup\n");
 }
 
+static void
+IjkMediaPlayer_injectCacheNode(JNIEnv *env, jobject thiz, jint index, jlong file_logical_pos, jlong physical_pos, jlong cache_size, jlong file_size) {
+    IjkMediaPlayer *mp = jni_get_media_player(env, thiz);
+    JNI_CHECK_GOTO(mp, env, NULL, "mpjni: injectCacheNode: null mp", LABEL_RETURN);
+    ijkmp_set_ijkio_inject_node(mp, index, file_logical_pos, physical_pos, cache_size, file_size);
+
+LABEL_RETURN:
+    ijkmp_dec_ref_p(&mp);
+    return;
+}
+
+static void
+IjkMediaPlayer_setFrameAtTime(JNIEnv *env, jobject thiz, jstring path, jlong start_time, jlong end_time, jint num, jint definition) {
+    IjkMediaPlayer *mp = jni_get_media_player(env, thiz);
+    const char *c_path = NULL;
+    JNI_CHECK_GOTO(path, env, "java/lang/IllegalArgumentException", "mpjni: setFrameAtTime: null path", LABEL_RETURN);
+    JNI_CHECK_GOTO(mp, env, "java/lang/IllegalStateException", "mpjni: setFrameAtTime: null mp", LABEL_RETURN);
+
+    c_path = (*env)->GetStringUTFChars(env, path, NULL );
+    JNI_CHECK_GOTO(c_path, env, "java/lang/OutOfMemoryError", "mpjni: setFrameAtTime: path.string oom", LABEL_RETURN);
+
+    ALOGV("setFrameAtTime: path %s", c_path);
+    ijkmp_set_frame_at_time(mp, c_path, start_time, end_time, num, definition);
+    (*env)->ReleaseStringUTFChars(env, path, c_path);
+
+LABEL_RETURN:
+    ijkmp_dec_ref_p(&mp);
+    return;
+}
+
+
 
 
 
@@ -1115,6 +1156,8 @@ static JNINativeMethod g_methods[] = {
     { "native_profileEnd",      "()V",                      (void *) IjkMediaPlayer_native_profileEnd },
 
     { "native_setLogLevel",     "(I)V",                     (void *) IjkMediaPlayer_native_setLogLevel },
+    { "_injectCacheNode",       "(IJJJJ)V",                 (void *) IjkMediaPlayer_injectCacheNode },
+    { "_setFrameAtTime",         "(Ljava/lang/String;JJII)V", (void *) IjkMediaPlayer_setFrameAtTime },
 };
 
 JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
